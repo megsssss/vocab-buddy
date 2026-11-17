@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vocab Buddy – Voice Vocabulary Agent</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--text:#1d1d1b;--muted:#6b6a64;--accent:#2f6fed;--ok:#1a8f4c;--warn:#c27a00;--line:#e3e1d9;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171716;--card:#232321;--text:#f1f0ea;--muted:#a3a198;--accent:#6b9bff;--ok:#4cc27f;--warn:#e5a13a;--line:#38372f}}
+:root[data-theme="dark"]{--bg:#171716;--card:#232321;--text:#f1f0ea;--muted:#a3a198;--accent:#6b9bff;--ok:#4cc27f;--warn:#e5a13a;--line:#38372f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+main{max-width:560px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+.word{font-size:34px;font-weight:700;margin:0}
+.pos{color:var(--muted);font-size:14px}
+.chat{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;margin-top:12px}
+.msg{padding:9px 12px;border-radius:12px;max-width:88%;font-size:15px}
+.bot{background:var(--bg);border:1px solid var(--line);align-self:flex-start}
+.me{background:var(--accent);color:#fff;align-self:flex-end}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.mic.on{background:#d33;border-color:#d33;color:#fff}
+button:disabled{opacity:.5;cursor:default}
+input{flex:1;min-width:0;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+.bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:12px}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.stats{display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}
+.hidden{display:none}
+.note{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<h1>🎙️ Vocab Buddy</h1>
+<p class="sub">A voice agent that teaches you one word at a time: it speaks, you answer out loud.</p>
+
+<div id="start" class="card">
+  <p style="margin-top:0">You’ll hear a word and its meaning, then use it in your own sentence. The agent checks your sentence and gives you an example.</p>
+  <div class="row"><button class="primary" id="go">Start session</button></div>
+  <p class="note" id="support"></p>
+</div>
+
+<div id="session" class="card hidden">
+  <div class="bar"><i id="prog"></i></div>
+  <div class="stats"><span id="count"></span><span id="score"></span></div>
+  <p class="word" id="w"></p>
+  <div class="pos" id="p"></div>
+  <div class="chat" id="chat" aria-live="polite"></div>
+  <div class="row">
+    <button class="mic" id="mic">🎤 Speak</button>
+    <input id="typed" placeholder="…or type your sentence" aria-label="Type your sentence">
+    <button id="send">Send</button>
+  </div>
+  <div class="row">
+    <button id="repeat">🔁 Repeat</button>
+    <button id="hint">💡 Hint</button>
+    <button id="next">Skip ➜</button>
+  </div>
+</div>
+
+<div id="done" class="card hidden">
+  <h2 style="margin-top:0">Session complete 🎉</h2>
+  <p id="summary"></p>
+  <div class="row"><button class="primary" id="again">Practise again</button></div>
+</div>
+</main>
+<script>
+var WORDS=[
+{w:"ephemeral",p:"adjective",d:"lasting for a very short time",e:"The beauty of a sunset is ephemeral.",h:"Think of a bubble or a rainbow."},
+{w:"resilient",p:"adjective",d:"able to recover quickly after difficulty",e:"She was resilient and bounced back after the setback.",h:"It describes someone who doesn’t stay down."},
+{w:"candid",p:"adjective",d:"honest and direct, even when it’s uncomfortable",e:"He gave me candid feedback on my presentation.",h:"The opposite of sugar-coating."},
+{w:"pragmatic",p:"adjective",d:"focused on what works in practice rather than in theory",e:"We took a pragmatic approach and shipped the simple version first.",h:"Practical, not idealistic."},
+{w:"ambiguous",p:"adjective",d:"open to more than one meaning; unclear",e:"The instructions were ambiguous, so everyone read them differently.",h:"It can be understood in two ways."},
+{w:"meticulous",p:"adjective",d:"showing great attention to detail",e:"She is meticulous about checking every number.",h:"Someone who never skips the small stuff."},
+{w:"mitigate",p:"verb",d:"to make something less severe or harmful",e:"Good planning can mitigate the risk of delays.",h:"Reduce the damage."},
+{w:"scalable",p:"adjective",d:"able to grow or handle more work without breaking",e:"We need a scalable process that works for ten clients or a thousand.",h:"It keeps working as it gets bigger."}
+];
+var i=0,score=0,tries=0,rec=null,SR=window.SpeechRecognition||window.webkitSpeechRecognition,hasTTS="speechSynthesis" in window;
+var $=function(id){return document.getElementById(id)};
+$("support").textContent=(SR?"Voice input is available. ":"Voice input isn’t supported in this browser, so please type your answers. ")+(hasTTS?"The agent will speak aloud.":"Spoken output isn’t supported here; read the text instead.");
+
+function say(t){add(t,"bot");if(!hasTTS)return;try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);u.lang="en-IN";u.rate=.95;speechSynthesis.speak(u)}catch(e){}}
+function add(t,c){var m=document.createElement("div");m.className="msg "+c;m.textContent=t;$("chat").appendChild(m);$("chat").scrollTop=1e6}
+function show(id){["start","session","done"].forEach(function(x){$(x).classList.toggle("hidden",x!==id)})}
+
+function load(){
+  var x=WORDS[i];tries=0;$("chat").innerHTML="";
+  $("w").textContent=x.w;$("p").textContent=x.p;
+  $("count").textContent="Word "+(i+1)+" of "+WORDS.length;$("score").textContent="Score: "+score;
+  $("prog").style.width=(i/WORDS.length*100)+"%";
+  say("Word "+(i+1)+": "+x.w+". It means "+x.d+". Can you use it in a sentence?");
+}
+function check(s){
+  var x=WORDS[i],t=s.toLowerCase().trim();if(!t)return;
+  add(s,"me");tries++;
+  var stem=x.w.slice(0,Math.max(4,x.w.length-3)),used=t.indexOf(stem)>-1,len=t.split(/\s+/).length;
+  if(used&&len>=5){score++;$("score").textContent="Score: "+score;
+    say("Nice, that works! Here’s another example: "+x.e);
+    $("next").textContent="Next word ➜";
+  }else if(used){say("Good start. Try a longer sentence with at least five words, so the meaning is clear.")}
+  else if(tries>=2){say("No worries. A good example is: "+x.e+" Let’s move on when you’re ready.");$("next").textContent="Next word ➜"}
+  else{say("I didn’t hear “"+x.w+"” in that. Try again, or tap Hint.")}
+}
+function nextWord(){
+  $("next").textContent="Skip ➜";i++;
+  if(i>=WORDS.length){speechSynthesis&&speechSynthesis.cancel&&speechSynthesis.cancel();
+    $("summary").textContent="You used "+score+" of "+WORDS.length+" words correctly in a sentence. Practising out loud helps words stick, so try again tomorrow.";
+    $("prog").style.width="100%";show("done");return}
+  load();
+}
+$("go").onclick=function(){i=0;score=0;show("session");load()};
+$("again").onclick=function(){i=0;score=0;show("session");load()};
+$("send").onclick=function(){var v=$("typed").value;$("typed").value="";check(v)};
+$("typed").onkeydown=function(e){if(e.key==="Enter")$("send").click()};
+$("repeat").onclick=function(){var x=WORDS[i];say(x.w+" means "+x.d+".")};
+$("hint").onclick=function(){say(WORDS[i].h)};
+$("next").onclick=nextWord;
+$("mic").onclick=function(){
+  if(!SR){say("Voice input isn’t supported in this browser. Please type your sentence.");return}
+  if(rec){rec.stop();return}
+  try{
+    if(hasTTS)speechSynthesis.cancel();
+    rec=new SR();rec.lang="en-IN";rec.interimResults=false;
+    rec.onstart=function(){$("mic").classList.add("on");$("mic").textContent="⏺ Listening…"};
+    rec.onresult=function(e){check(e.results[0][0].transcript)};
+    rec.onerror=function(){add("I couldn’t access the microphone. You can type instead.","bot")};
+    rec.onend=function(){rec=null;$("mic").classList.remove("on");$("mic").textContent="🎤 Speak"};
+    rec.start();
+  }catch(e){rec=null;add("Microphone unavailable. Please type your sentence.","bot")}
+};
+</script>
+</body>
+</html>
