@@ -2,7 +2,7 @@
 
 A simple voice agent that helps people learn vocabulary. It speaks a word and its meaning, asks you to use the word in your own sentence (by voice or by typing), checks your answer, and gives you an example.
 
-**Live demo:** https://megsssss.github.io/vocab-buddy/ *(update this link if your repo name is different)*
+**Live demo:** https://megsssss.github.io/vocab-buddy/ 
 
 ## Why I built it
 
